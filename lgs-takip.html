@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>LGS 2027 Başarı Öngörücü</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; max-width: 950px; margin: auto; padding: 20px; background: #f4f7f6; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .trial-row { display: grid; grid-template-columns: 40px 130px 80px 130px 1fr 40px; gap: 10px; margin-bottom: 10px; align-items: center; background: #fafafa; padding: 10px; border-radius: 6px; border: 1px solid #eee; }
+        input, select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 100%; box-sizing: border-box; }
+        .err-in { font-weight: bold; color: #d9534f; }
+        .btn { padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .btn-add { background: #28a745; color: white; width: 100%; margin-bottom: 15px; }
+        .btn-calc { background: #007bff; color: white; width: 100%; margin-bottom: 10px; }
+        .util-row { display: flex; gap: 8px; margin-bottom: 15px; }
+        .btn-util { background: #6c757d; color: white; flex: 1; font-size: 0.8em; }
+        .btn-del { background: #ffdfdf; color: #c0392b; padding: 5px; font-size: 0.8em; }
+        #results-area { margin-top: 10px; padding: 20px; background: #eef2f3; border-radius: 8px; text-align: center; }
+        .prob-value { font-size: 2.2em; color: #2c3e50; font-weight: bold; }
+        #growthChart { margin-top: 20px; background: white; border-radius: 8px; padding: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>LGS 2027 Performans Takip Sistemi</h2>
+    <div style="margin-bottom: 15px;">
+        Hedeflenen Maksimum Yanlış Sayısı: <input type="number" id="targetK" value="0" style="width: 60px;" onchange="calculateAll()">
+    </div>
+    
+    <div id="trials-container">
+        <div style="display: grid; grid-template-columns: 40px 130px 80px 130px 1fr 40px; gap: 10px; font-size: 0.8em; color: #666; font-weight: bold; margin-bottom: 5px; padding: 0 10px;">
+            <div>#</div><div>Tarih</div><div>Yanlış</div><div>Zorluk Katsayısı</div><div>Açıklama / Sınav Adı</div><div></div>
+        </div>
+    </div>
+
+    <button class="btn btn-add" onclick="addTrialRow()">+ Yeni Deneme Ekle</button>
+    <button class="btn btn-calc" onclick="calculateAll()">Hesapla ve İlerlemeyi Kaydet</button>
+
+    <div class="util-row">
+        <button class="btn btn-util" onclick="exportJSON()">JSON Olarak Dışa Aktar</button>
+        <button class="btn btn-util" onclick="document.getElementById('fileInput').click()">JSON İçe Aktar</button>
+        <button class="btn btn-util" style="background:#c0392b" onclick="clearData()">Tüm Verileri Sıfırla</button>
+    </div>
+    
+    <input type="file" id="fileInput" accept=".json" style="display:none" onchange="importJSON(event)">
+
+    <div id="results-area">
+        <span id="labelK">Hedefe Ulaşma Olasılığı:</span>
+        <span class="prob-value" id="finalProb">--%</span>
+        <div id="dataStats" style="font-size: 0.9em; margin-top:5px; color: #666;">Analiz için veri giriniz.</div>
+    </div>
+
+    <canvas id="growthChart" height="250"></canvas>
+</div>
+
+<script>
+    let chart;
+    const TOTAL_Q = 90;
+    const STORAGE_KEY = 'lgs_2027_v4_tr';
+
+    function nCr(n, r) {
+        if (r < 0 || r > n) return 0;
+        let res = 1;
+        for (let i = 1; i <= Math.min(r, n-r); i++) res = res * (n - i + 1) / i;
+        return res;
+    }
+
+    function getCumulativeBinomial(p, k) {
+        let cumulative = 0;
+        for (let i = 0; i <= k; i++) {
+            cumulative += nCr(TOTAL_Q, i) * Math.pow(1 - p, i) * Math.pow(p, TOTAL_Q - i);
+        }
+        return cumulative;
+    }
+
+    function addTrialRow(e = "", w = "1", d = "", c = "") {
+        const container = document.getElementById('trials-container');
+        const count = container.querySelectorAll('.trial-row').length + 1;
+        const today = new Date().toISOString().split('T')[0];
+        
+        const row = document.createElement('div');
+        row.className = 'trial-row';
+        row.innerHTML = `
+            <span>${count}</span>
+            <input type="date" class="date-in" value="${d || today}">
+            <input type="number" class="err-in" value="${e}" min="0" max="90">
+            <select class="weight-in">
+                <option value="0.5" ${w=="0.5"?'selected':''}>Kolay (0.5x)</option>
+                <option value="1" ${w=="1"?'selected':''}>Normal (1.0x)</option>
+                <option value="2" ${w=="2"?'selected':''}>Zor/TG (2.0x)</option>
+            </select>
+            <input type="text" class="comm-in" placeholder="Örn: Özdebir TG-1" value="${c}">
+            <button class="btn btn-del" onclick="this.parentElement.remove(); calculateAll();">✕</button>
+        `;
+        container.appendChild(row);
+    }
+
+    function calculateAll() {
+        const rows = document.querySelectorAll('.trial-row');
+        const targetK = parseInt(document.getElementById('targetK').value) || 0;
+        
+        let alpha = 1; let beta = 1;  
+        let chartData = []; let labels = []; let trials = [];
+
+        rows.forEach((row, i) => {
+            const e = parseFloat(row.querySelector('.err-in').value) || 0;
+            const w = parseFloat(row.querySelector('.weight-in').value) || 1;
+            const d = row.querySelector('.date-in').value;
+            const c = row.querySelector('.comm-in').value;
+            
+            trials.push({ e, w, d, c });
+            alpha += (TOTAL_Q - e) * w;
+            beta += e * w;
+
+            let p_hat = alpha / (alpha + beta);
+            chartData.push((getCumulativeBinomial(p_hat, targetK) * 100).toFixed(2));
+            labels.push(d || `D${i+1}`);
+        });
+
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ targetK, trials }));
+
+        if(chartData.length > 0) {
+            document.getElementById('labelK').innerText = `≤ ${targetK} Yanlış Yapma Olasılığı:`;
+            document.getElementById('finalProb').innerText = "%" + chartData[chartData.length - 1];
+            document.getElementById('dataStats').innerText = `Ağırlıklı Başarı Oranı: %${((alpha/(alpha+beta))*100).toFixed(2)} | Toplam Veri: ${rows.length} deneme`;
+            updateChart(labels, chartData);
+        }
+    }
+
+    function updateChart(labels, data) {
+        if (chart) chart.destroy();
+        chart = new Chart(document.getElementById('growthChart'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Başarı Olasılığı (%)',
+                    data: data,
+                    borderColor: '#3498db',
+                    backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 5,
+                    pointHoverRadius: 8
+                }]
+            },
+            options: { 
+                responsive: true, 
+                scales: { 
+                    y: { 
+                        beginAtZero: true, 
+                        max: 100,
+                        title: { display: true, text: 'Olasılık Yüzdesi (%)' }
+                    },
+                    x: { title: { display: true, text: 'Sınav Tarihi' } }
+                } 
+            }
+        });
+    }
+
+    function exportJSON() {
+        const data = localStorage.getItem(STORAGE_KEY);
+        const blob = new Blob([data], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `lgs_2027_veri_yedek.json`;
+        a.click();
+    }
+
+    function importJSON(event) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const data = JSON.parse(e.target.result);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            location.reload(); 
+        };
+        reader.readAsText(event.target.files[0]);
+    }
+
+    function clearData() { if(confirm("Tüm verileri silmek istediğinize emin misiniz?")) { localStorage.removeItem(STORAGE_KEY); location.reload(); } }
+
+    window.onload = () => {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+            const data = JSON.parse(saved);
+            document.getElementById('targetK').value = data.targetK || 0;
+            (data.trials || []).forEach(t => addTrialRow(t.e, t.w, t.d, t.c));
+            calculateAll();
+        } else {
+            addTrialRow(2, "1", "", "Örnek Deneme");
+        }
+    };
+</script>
+</body>
+</html>
