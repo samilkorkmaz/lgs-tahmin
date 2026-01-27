@@ -1,5 +1,5 @@
 # lgs-takip
-Deneme sınav sonuçlarına göre hedeflenen yanlış sayısına ulaşma olasılığını hesaplar
+LGS yanlış sayısı olasılığını deneme sınav sonuçlarını kullanarak hesaplar.
 
 https://samilkorkmaz.github.io/lgs-tahmin/
 
