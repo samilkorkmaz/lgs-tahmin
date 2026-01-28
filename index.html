@@ -2,6 +2,7 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LGS Tahmin</title>
     <link rel="icon" type="image/png" href="argun.png">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -20,6 +21,53 @@
         #results-area { margin-top: 10px; padding: 20px; background: #eef2f3; border-radius: 8px; text-align: center; }
         .prob-value { font-size: 2.2em; color: #2c3e50; font-weight: bold; }
         #growthChart { margin-top: 20px; background: white; border-radius: 8px; padding: 10px; }
+        .header-row { display: grid; grid-template-columns: 40px 130px 80px 130px 1fr 40px; gap: 10px; font-size: 0.8em; color: #666; font-weight: bold; margin-bottom: 5px; padding: 0 10px; }
+        .field-wrapper { display: contents; }
+        .mobile-label { display: none; }
+        
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .card { padding: 15px; }
+            .header-row { display: none; }
+            .trial-row { 
+                grid-template-columns: 1fr; 
+                gap: 8px; 
+                padding: 40px 15px 15px 15px;
+                position: relative;
+            }
+            .field-wrapper {
+                display: block;
+            }
+            .mobile-label {
+                display: block;
+                font-size: 0.75em;
+                color: #666;
+                font-weight: bold;
+                margin-bottom: 4px;
+                text-transform: uppercase;
+            }
+            .row-number {
+                position: absolute;
+                top: 12px;
+                left: 15px;
+                font-weight: bold;
+                color: #666;
+                font-size: 1.1em;
+            }
+            .trial-row input, .trial-row select {
+                font-size: 16px;
+            }
+            .btn-del {
+                position: absolute;
+                top: 8px;
+                right: 10px;
+                padding: 8px 12px;
+            }
+            .util-row { flex-direction: column; }
+            .btn-util { font-size: 0.9em; }
+            .prob-value { font-size: 1.8em; }
+            #results-area { padding: 15px; }
+        }
     </style>
 </head>
 <body>
@@ -33,7 +81,7 @@
     </div>
     
     <div id="trials-container">
-        <div style="display: grid; grid-template-columns: 40px 130px 80px 130px 1fr 40px; gap: 10px; font-size: 0.8em; color: #666; font-weight: bold; margin-bottom: 5px; padding: 0 10px;">
+        <div class="header-row">
             <div>#</div><div>Tarih</div><div>Yanlış</div><div>Zorluk Katsayısı</div><div>Açıklama / Sınav Adı</div><div></div>
         </div>
     </div>
@@ -86,15 +134,27 @@
         const row = document.createElement('div');
         row.className = 'trial-row';
         row.innerHTML = `
-            <span>${count}</span>
-            <input type="date" class="date-in" value="${d || today}">
-            <input type="number" class="err-in" value="${e}" min="0" max="90">
-            <select class="weight-in">
-                <option value="0.5" ${w=="0.5"?'selected':''}>Kolay (0.5x)</option>
-                <option value="1" ${w=="1"?'selected':''}>Normal (1.0x)</option>
-                <option value="2" ${w=="2"?'selected':''}>Zor/TG (2.0x)</option>
-            </select>
-            <input type="text" class="comm-in" placeholder="Örn: Özdebir TG-1" value="${c}">
+            <span class="row-number">Sınav-${count}</span>
+            <div class="field-wrapper">
+                <label class="mobile-label">Tarih</label>
+                <input type="date" class="date-in" value="${d || today}">
+            </div>
+            <div class="field-wrapper">
+                <label class="mobile-label">Yanlış</label>
+                <input type="number" class="err-in" value="${e}" min="0" max="90" placeholder="Yanlış Sayısı">
+            </div>
+            <div class="field-wrapper">
+                <label class="mobile-label">Zorluk Katsayısı</label>
+                <select class="weight-in">
+                    <option value="0.5" ${w=="0.5"?'selected':''}>Kolay (0.5x)</option>
+                    <option value="1" ${w=="1"?'selected':''}>Normal (1.0x)</option>
+                    <option value="2" ${w=="2"?'selected':''}>Zor/TG (2.0x)</option>
+                </select>
+            </div>
+            <div class="field-wrapper">
+                <label class="mobile-label">Açıklama / Sınav Adı</label>
+                <input type="text" class="comm-in" placeholder="Örn: Özdebir TG-1" value="${c}">
+            </div>
             <button class="btn btn-del" onclick="this.parentElement.remove(); calculateAll();">✕</button>
         `;
         container.appendChild(row);
@@ -199,9 +259,3 @@
 </body>
 
 </html>
-
-
-
-
-
-
